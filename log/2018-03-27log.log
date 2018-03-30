@@ -1,0 +1,9 @@
+2018-03-27 16:27:20   error query - pq: unrecognized configuration parameter "user.id"
+2018-03-27 16:30:18   error query - pq: unrecognized configuration parameter "user.id"
+2018-03-27 16:35:54   error query - pq: got 2 parameters but the statement requires 1
+2018-03-27 16:38:20   error query - pq: unrecognized configuration parameter "user.id"
+2018-03-27 16:39:31   error query - pq: unrecognized configuration parameter "user.id"
+2018-03-27 17:05:31   error query - pq: unrecognized configuration parameter "user.id"
+2018-03-27 17:07:42   error query - pq: unrecognized configuration parameter "user.id"
+2018-03-27 17:08:42   error query - pq: unrecognized configuration parameter "user.id"
+2018-03-27 17:10:35   error query - pq: unrecognized configuration parameter "user.id"
