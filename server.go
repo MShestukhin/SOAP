@@ -217,7 +217,7 @@ func (nn *server) deleteImsi(imsi, group string) (int, error) {
 
 func (nn *server) Init() {
 	pathConf := "/opt/svyazcom/etc/serverSOAP/"
-	config := LoadConfiguration(pathConf + "/soap.conf")
+	config := LoadConfiguration(pathConf + "soap.conf")
 	connStr := "user=" + config.Database.User + " dbname=" + config.Database.Dbname + " host=" + config.Database.Host + " password=" + config.Database.Password + " port=" + config.Database.Port + " sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
 	checkError("error db connect", nn.logPath, err)

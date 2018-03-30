@@ -62,3 +62,5 @@
 2018-03-28 12:55:25   Cannot insert into grp_imsiINSERT INTO grp_imsi (list_id, imsi) VALUES (1, 250012345679963)   pq: duplicate key value violates unique constraint "grp_imsi_list_id_imsi_key"
 2018-03-28 12:55:25   Cannot insert into grp_imsiINSERT INTO grp_imsi (list_id, imsi) VALUES (1, 250012345679979)   pq: duplicate key value violates unique constraint "grp_imsi_list_id_imsi_key"
 2018-03-28 13:53:19   Cannot get grp_list   dial tcp 172.18.1.82:5432: socket: too many open files
+2018.03.30 16:55:41   not config file.   open /opt/svyazcom/etc/serverSOAP//soap.conf: no such file or directory
+2018.03.30 16:55:41   not valid json.   invalid argument
