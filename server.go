@@ -11,7 +11,6 @@ import (
 	"strconv"
 
 	_ "github.com/lib/pq"
-	"github.com/valyala/fasthttp"
 )
 
 const (
@@ -27,6 +26,7 @@ type ReqXml struct {
 type BodyXml struct {
 	AddReq    ReqXml `xml:"AddRequest"`
 	DeleteReq ReqXml `xml:"DeleteRequest"`
+	UpdateReq ReqXml `xml:"UpdateRequest"`
 }
 type SoapXml struct {
 	XMLName xml.Name //`xml:"SOAP-ENV:Envelope"`
@@ -82,64 +82,54 @@ type server struct {
 
 func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	xmlFile, _ := ioutil.ReadAll(r.Body)
-	// fmt.Println(string(xmlFile))
 	r.Body.Close()
 	var q SoapXml
 	_ = xmlFile
 	xml.Unmarshal((xmlFile), &q)
-	// fmt.Println(q)
+	var requestResponse string
+	var imsi_str string
+	var group_id_str string
+	var query string
+	check_row_exist := true
 	if q.Body.AddReq.Imsi != "" && q.Body.DeleteReq.Imsi == "" {
-		status, err := checkData(q.Body.AddReq.Imsi, q.Body.AddReq.GroupId)
-		if err == nil {
-			status, err = nn.addImsi(q.Body.AddReq.Imsi, q.Body.AddReq.GroupId)
-			nn.logQuery("add query", q.Body.AddReq.Imsi, q.Body.AddReq.GroupId, r.RemoteAddr, status, err)
-		} else {
-			nn.logQuery("add query", q.Body.AddReq.Imsi, q.Body.AddReq.GroupId, r.RemoteAddr, status, err)
-		}
-		x := []byte(fmt.Sprintf(`<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-			<SOAP-ENV:Body>
-			  <AddRequestResponse xmlns="urn:bicwsdl">
-				<response>
-				  <errorCode>%d</errorCode>
-				</response>
-			  </AddRequestResponse>
-			</SOAP-ENV:Body>
-		  </SOAP-ENV:Envelope>`, status))
-		w.Header().Set("Content-Type", "application/xml")
-		w.Write(x)
+		imsi_str = q.Body.AddReq.Imsi
+		group_id_str = q.Body.AddReq.GroupId
+		query = fmt.Sprintf("INSERT INTO grp_imsi (list_id, imsi) VALUES (%s, %s)", group_id_str, imsi_str)
+		requestResponse = "AddRequestResponse"
+		check_row_exist = false
+
+	} else if q.Body.UpdateReq.Imsi != "" {
+		imsi_str = q.Body.UpdateReq.Imsi
+		group_id_str = q.Body.UpdateReq.GroupId
+		query = fmt.Sprintf("UPDATE grp_imsi SET list_id=%s WHERE imsi='%s'", group_id_str, imsi_str)
+		requestResponse = "UpdateRequestResponse"
 	} else if q.Body.AddReq.Imsi == "" && q.Body.DeleteReq.Imsi != "" {
-		status, err := checkData(q.Body.DeleteReq.Imsi, q.Body.DeleteReq.GroupId)
-		if err == nil {
-			status, err = nn.deleteImsi(q.Body.DeleteReq.Imsi, q.Body.DeleteReq.GroupId)
-			nn.logQuery("delete query", q.Body.DeleteReq.Imsi, q.Body.DeleteReq.GroupId, r.RemoteAddr, status, err)
-		} else {
-			nn.logQuery("delete query", q.Body.DeleteReq.Imsi, q.Body.DeleteReq.GroupId, r.RemoteAddr, status, err)
-		}
-		x := []byte(fmt.Sprintf(`<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-			<SOAP-ENV:Body>
-			  <DeleteRequestResponse xmlns="urn:bicwsdl">
-				<response>
-				  <errorCode>%d</errorCode>
-				</response>
-			  </DeleteRequestResponse>
-			</SOAP-ENV:Body>
-		  </SOAP-ENV:Envelope>`, status))
-		w.Header().Set("Content-Type", "application/xml")
-		w.Write(x)
+		imsi_str = q.Body.DeleteReq.Imsi
+		group_id_str = q.Body.DeleteReq.GroupId
+		query = fmt.Sprintf("DELETE from grp_imsi WHERE list_id = %s AND imsi = '%s'", group_id_str, imsi_str)
+		requestResponse = "DeleteRequestResponse"
 	} else {
 		loging(fmt.Sprintf("ip - s% incorrect query addImsi - %s deleteImsi - %s", r.RemoteAddr, q.Body.AddReq.Imsi, q.Body.DeleteReq.Imsi), nn.logPath)
-		x := []byte(fmt.Sprintf(`<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-			<SOAP-ENV:Body>
-			  <DeleteRequestResponse xmlns="urn:bicwsdl">
-				<response>
-				  <errorCode>%d</errorCode>
-				</response>
-			  </DeleteRequestResponse>
-			</SOAP-ENV:Body>
-		  </SOAP-ENV:Envelope>`, 800))
-		w.Header().Set("Content-Type", "application/xml")
-		w.Write(x)
+		requestResponse = "DeleteRequestResponse"
 	}
+	status, err := checkData(imsi_str, group_id_str)
+	if err == nil {
+		status, err = nn.doImsi(imsi_str, group_id_str, query, func(coun int) bool { return coun == 0 }, check_row_exist)
+		nn.logQuery("add query", imsi_str, group_id_str, r.RemoteAddr, status, err)
+	} else {
+		nn.logQuery("add query", imsi_str, group_id_str, r.RemoteAddr, status, err)
+	}
+	x := []byte(fmt.Sprintf(`<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+		<SOAP-ENV:Body>
+		  <%s xmlns="urn:bicwsdl">
+			<response>
+			  <errorCode>%d</errorCode>
+			</response>
+		  </%s>
+		</SOAP-ENV:Body>
+	  </SOAP-ENV:Envelope>`, requestResponse, status, requestResponse))
+	w.Header().Set("Content-Type", "application/xml")
+	w.Write(x)
 }
 
 func (nn *server) logQuery(header, imsi, group, ip string, status int, err error) {
@@ -151,8 +141,23 @@ func (nn *server) logQuery(header, imsi, group, ip string, status int, err error
 
 }
 
-func (nn *server) addImsi(imsi, group string) (int, error) {
+func (nn *server) query_to_Db(query string) error {
+	tx, _ := nn.conn.Begin()
+	tx.Exec("select set_config('user.id', '17', false)")
+	_, err := tx.Exec("select current_setting('user.id')")
+	checkError("Cannot set param", nn.logPath, err)
+	_, err = tx.Exec(query)
+	checkError("Cannot update grp_imsi"+query, nn.logPath, err)
+	if err != nil {
+		fmt.Println("error query - " + err.Error())
+		loging("error query - "+err.Error(), nn.logPath)
+		return errors.New("Cannot update grp_imsi")
+	}
+	err = tx.Commit()
+	return err
+}
 
+func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(coun int) bool, check_row_exist bool) (int, error) {
 	rows, err := nn.conn.Query("select count(id) from grp_list WHERE id = $1", group)
 	checkError("Cannot get grp_list", nn.logPath, err)
 	if err != nil {
@@ -166,22 +171,28 @@ func (nn *server) addImsi(imsi, group string) (int, error) {
 	if coun == 0 {
 		return 1004, nil
 	}
-	rows, err = nn.conn.Query("select count(id) from grp_imsi WHERE list_id = $1  AND imsi = $2", group, imsi)
+	rows, err = nn.conn.Query("select count(id) from grp_imsi WHERE imsi = $1", imsi)
 	checkError("Cannot get grp_imsi", nn.logPath, err)
 	if err != nil {
 		loging("error query - "+err.Error(), nn.logPath)
 		return 2000, errors.New("Cannot get grp_imsi")
 	}
+
 	for rows.Next() {
 		rows.Scan(&coun)
 	}
-	if coun != 0 {
-		return 1002, nil
+
+	if check_row_exist {
+		if check_exist_row(coun) {
+			return 1002, nil
+		}
 	}
 
-	err = nn.insertImsi(imsi, group)
+	//err = nn.insertImsi(imsi, group)
+	err = nn.query_to_Db(cmd_query)
+	//err = nn.updateImsi(imsi, group)
 	if err != nil {
-		return 2000, errors.New("Cannot insert into grp_imsi")
+		return 2000, errors.New("Cannot insert grp_imsi")
 	}
 	return 0, nil
 }
@@ -207,16 +218,9 @@ func checkData(imsi, group string) (int, error) {
 	return 0, nil
 }
 
-func (nn *server) deleteImsi(imsi, group string) (int, error) {
-	err := nn.deleteImsiTx(imsi, group)
-	if err != nil {
-		return 2000, errors.New("Cannot delete from grp_imsi")
-	}
-	return 0, nil
-}
-
 func (nn *server) Init() {
 	pathConf := "/opt/svyazcom/etc/serverSOAP/"
+	//pathConf := "./"
 	config := LoadConfiguration(pathConf + "soap.conf")
 	connStr := "user=" + config.Database.User + " dbname=" + config.Database.Dbname + " host=" + config.Database.Host + " password=" + config.Database.Password + " port=" + config.Database.Port + " sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
@@ -224,46 +228,13 @@ func (nn *server) Init() {
 	nn.conn = db
 	nn.logPath = config.logPath
 	nn.conn.Query("SET search_path TO steer_web, steer, public")
-
 	// fasthttp.ListenAndServe(port, nn.testProcessing)
 	// http.HandleFunc("/", nn.testProcessing)
 	http.HandleFunc("/", nn.processing)
 	http.ListenAndServe(port, nil)
 }
 
-func (nn *server) insertImsi(imsi, group string) error {
-	tx, _ := nn.conn.Begin()
-	tx.Exec("select set_config('user.id', '17', false)")
-	_, err := tx.Exec("select current_setting('user.id')")
-	checkError("Cannot set param", nn.logPath, err)
-	query := fmt.Sprintf("INSERT INTO grp_imsi (list_id, imsi) VALUES (%s, %s)", group, imsi)
-	_, err = tx.Exec(query)
-	checkError("Cannot insert into grp_imsi"+query, nn.logPath, err)
-	if err != nil {
-		loging("error query - "+err.Error(), nn.logPath)
-		return errors.New("Cannot insert into grp_imsi")
-	}
-	err = tx.Commit()
-	return err
-}
-
-func (nn *server) deleteImsiTx(imsi, group string) error {
-	tx, _ := nn.conn.Begin()
-	tx.Exec("select set_config('user.id', '17', false)")
-	_, err := tx.Exec("select current_setting('user.id')")
-	checkError("Cannot set param", nn.logPath, err)
-	query := fmt.Sprintf("DELETE from grp_imsi WHERE list_id = %s AND imsi = '%s'", group, imsi)
-	_, err = tx.Exec(query)
-	checkError("Cannot delete from grp_imsi"+query, nn.logPath, err)
-	if err != nil {
-		loging("error query - "+err.Error(), nn.logPath)
-		return errors.New("Cannot delete from grp_imsi")
-	}
-	err = tx.Commit()
-	return err
-}
-
-func (nn *server) testProcessing(ctx *fasthttp.RequestCtx) {
+/*func (nn *server) testProcessing(ctx *fasthttp.RequestCtx) {
 	// set some headers and status code first
 	ctx.SetContentType("foo/bar")
 	ctx.SetStatusCode(fasthttp.StatusOK)
@@ -288,4 +259,4 @@ func (nn *server) testProcessing(ctx *fasthttp.RequestCtx) {
 	//
 	// Unlike net/http fasthttp doesn't put response to the wire until
 	// returning from RequestHandler.
-}
+}*/
