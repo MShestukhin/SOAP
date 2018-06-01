@@ -7,9 +7,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"regexp"
-	"strconv"
-
 	_ "github.com/lib/pq"
 )
 
@@ -21,6 +18,7 @@ type ReqXml struct {
 	Xmlns   string `xml:"xmlns,attr"`
 	Imsi    string `xml:"imsi"`
 	GroupId string `xml:"groupId"`
+	Imsi_replace string `xml:"ImsiReplace"`
 }
 
 type BodyXml struct {
@@ -90,18 +88,45 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	var imsi_str string
 	var group_id_str string
 	var query string
-	check_row_exist := func(coun int) bool { return coun == 0 }
+	check_row_exist := func(coun int, conn *sql.DB) (int, string) {
+		if coun == 0{
+			return 1004, ""
+		}
+		rows, err := nn.conn.Query("select count(id) from grp_imsi WHERE id = $1", group_id_str)
+		checkError("Cannot get grp_imsi", nn.logPath, err)
+		if err != nil {
+			loging("error query - "+err.Error(), nn.logPath)
+			return 2000, "Cannot get grp_imsi"
+		}
+		for rows.Next() {
+			rows.Scan(&coun)
+		}
+		return 0,""
+	}
 	if q.Body.AddReq.Imsi != "" && q.Body.DeleteReq.Imsi == "" {
 		imsi_str = q.Body.AddReq.Imsi
 		group_id_str = q.Body.AddReq.GroupId
 		query = fmt.Sprintf("INSERT INTO grp_imsi (list_id, imsi) VALUES (%s, %s)", group_id_str, imsi_str)
 		requestResponse = "AddRequestResponse"
-		check_row_exist = func(coun int) bool { return coun != 0 }
-
+		check_row_exist = func(coun int, conn *sql.DB) (int, string) {
+			if coun != 0{
+				return 1004, ""
+			}
+			rows, err := nn.conn.Query("select count(id) from grp_imsi WHERE id = $1", group_id_str)
+			checkError("Cannot get grp_imsi", nn.logPath, err)
+			if err != nil {
+				loging("error query - "+err.Error(), nn.logPath)
+				return 2000, "Cannot get grp_imsi"
+			}
+			for rows.Next() {
+				rows.Scan(&coun)
+			}
+			return 0,""
+		}
 	} else if q.Body.UpdateReq.Imsi != "" {
 		imsi_str = q.Body.UpdateReq.Imsi
-		group_id_str = q.Body.UpdateReq.GroupId
-		query = fmt.Sprintf("UPDATE grp_imsi SET list_id=%s WHERE imsi='%s'", group_id_str, imsi_str)
+		group_id_str = q.Body.UpdateReq.Imsi_replace
+		query = fmt.Sprintf("UPDATE grp_imsi SET imsi=%s WHERE imsi='%s'", group_id_str, imsi_str)
 		requestResponse = "UpdateRequestResponse"
 	} else if q.Body.AddReq.Imsi == "" && q.Body.DeleteReq.Imsi != "" {
 		imsi_str = q.Body.DeleteReq.Imsi
@@ -157,36 +182,45 @@ func (nn *server) query_to_Db(query string) error {
 	return err
 }
 
-func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(coun int) bool) (int, error) {
-	rows, err := nn.conn.Query("select count(id) from grp_list WHERE id = $1", group)
-	checkError("Cannot get grp_list", nn.logPath, err)
-	if err != nil {
-		loging("error query - "+err.Error(), nn.logPath)
-		return 2000, errors.New("Cannot get grp_list")
-	}
+func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(coun int, conn *sql.DB) (int, string)) (int, error) {
 	var coun int
-	for rows.Next() {
-		rows.Scan(&coun)
-	}
-	if coun == 0 {
-		return 1004, nil
-	}
-	rows, err = nn.conn.Query("select count(id) from grp_imsi WHERE imsi = $1", imsi)
+	rows, err := nn.conn.Query("select count(id) from grp_imsi WHERE imsi = $1", imsi)
 	checkError("Cannot get grp_imsi", nn.logPath, err)
 	if err != nil {
 		loging("error query - "+err.Error(), nn.logPath)
 		return 2000, errors.New("Cannot get grp_imsi")
 	}
-
 	for rows.Next() {
 		rows.Scan(&coun)
 	}
 
-
-	if check_exist_row(coun) {
-		return 1002, nil
+	if code, errString := check_exist_row(coun, nn.conn); code!=0 {
+		return code, errors.New(errString)
 	}
-
+	/*if(coun>0){
+		rows, err := nn.conn.Query("select count(id) from grp_imsi WHERE imsi = $1", group)
+		checkError("Cannot get grp_imsi", nn.logPath, err)
+		if err != nil {
+			loging("error query - "+err.Error(), nn.logPath)
+			return 2000, errors.New("Cannot get grp_imsi")
+		}
+		for rows.Next() {
+			rows.Scan(&coun)
+		}
+	} else{
+		rows, err := nn.conn.Query("select count(id) from grp_imsi WHERE id = $1", group)
+		checkError("Cannot get grp_imsi", nn.logPath, err)
+		if err != nil {
+			loging("error query - "+err.Error(), nn.logPath)
+			return 2000, errors.New("Cannot get grp_imsi")
+		}
+		for rows.Next() {
+			rows.Scan(&coun)
+		}
+		if coun != 0 {
+			return 1004, nil
+		}
+	}*/
 
 	//err = nn.insertImsi(imsi, group)
 	err = nn.query_to_Db(cmd_query)
@@ -201,7 +235,7 @@ func checkData(imsi, group string) (int, error) {
 	if imsi == "" || group == "" {
 		return 800, errors.New("imsi AND group cannot be empty")
 	}
-	r, _ := regexp.Compile("^[0-9]+$")
+	/*r, _ := regexp.Compile("^[0-9]+$")
 	if !r.Match([]byte(imsi)) || !r.Match([]byte(group)) {
 		return 800, errors.New("imsi AND group should consist only from digits")
 	}
@@ -214,7 +248,7 @@ func checkData(imsi, group string) (int, error) {
 	}
 	if len(imsi) != 15 {
 		return 800, errors.New("IMSI should consist of 15 digits")
-	}
+	}*/
 	return 0, nil
 }
 
