@@ -64,3 +64,19 @@
 2018-03-28 13:53:19   Cannot get grp_list   dial tcp 172.18.1.82:5432: socket: too many open files
 2018.03.30 16:55:41   not config file.   open /opt/svyazcom/etc/serverSOAP//soap.conf: no such file or directory
 2018.03.30 16:55:41   not valid json.   invalid argument
+2018.05.31 10:08:49   not config file.   open /opt/svyazcom/etc/serverSOAP/soap.conf: no such file or directory
+2018.05.31 10:08:49   not valid json.   invalid argument
+2018.05.31 10:12:26   not config file.   open /opt/svyazcom/etc/serverSOAP/soap.conf: no such file or directory
+2018.05.31 10:12:26   not valid json.   invalid argument
+2018.05.31 10:19:07   not config file.   open /opt/svyazcom/etc/serverSOAP/soap.conf: no such file or directory
+2018.05.31 10:19:07   not valid json.   invalid argument
+2018.05.31 10:19:26   not config file.   open /opt/svyazcom/etc/serverSOAP/soap.conf: no such file or directory
+2018.05.31 10:19:26   not valid json.   invalid argument
+2018.05.31 10:22:18   not config file.   open /opt/svyazcom/etc/serverSOAP/soap.conf: no such file or directory
+2018.05.31 10:22:18   not valid json.   invalid argument
+2018.05.31 10:24:29   not config file.   open /opt/svyazcom/etc/serverSOAP/soap.conf: no such file or directory
+2018.05.31 10:24:29   not valid json.   invalid argument
+2018.05.31 10:26:25   not config file.   open /opt/svyazcom/etc/serverSOAP/soap.conf: no such file or directory
+2018.05.31 10:26:25   not valid json.   invalid argument
+2018.05.31 10:26:33   not config file.   open /opt/svyazcom/etc/serverSOAP/soap.conf: no such file or directory
+2018.05.31 10:26:33   not valid json.   invalid argument

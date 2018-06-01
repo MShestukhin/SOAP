@@ -90,13 +90,13 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	var imsi_str string
 	var group_id_str string
 	var query string
-	check_row_exist := true
+	check_row_exist := func(coun int) bool { return coun == 0 }
 	if q.Body.AddReq.Imsi != "" && q.Body.DeleteReq.Imsi == "" {
 		imsi_str = q.Body.AddReq.Imsi
 		group_id_str = q.Body.AddReq.GroupId
 		query = fmt.Sprintf("INSERT INTO grp_imsi (list_id, imsi) VALUES (%s, %s)", group_id_str, imsi_str)
 		requestResponse = "AddRequestResponse"
-		check_row_exist = false
+		check_row_exist = func(coun int) bool { return coun != 0 }
 
 	} else if q.Body.UpdateReq.Imsi != "" {
 		imsi_str = q.Body.UpdateReq.Imsi
@@ -114,7 +114,7 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	}
 	status, err := checkData(imsi_str, group_id_str)
 	if err == nil {
-		status, err = nn.doImsi(imsi_str, group_id_str, query, func(coun int) bool { return coun == 0 }, check_row_exist)
+		status, err = nn.doImsi(imsi_str, group_id_str, query, check_row_exist)
 		nn.logQuery("add query", imsi_str, group_id_str, r.RemoteAddr, status, err)
 	} else {
 		nn.logQuery("add query", imsi_str, group_id_str, r.RemoteAddr, status, err)
@@ -157,7 +157,7 @@ func (nn *server) query_to_Db(query string) error {
 	return err
 }
 
-func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(coun int) bool, check_row_exist bool) (int, error) {
+func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(coun int) bool) (int, error) {
 	rows, err := nn.conn.Query("select count(id) from grp_list WHERE id = $1", group)
 	checkError("Cannot get grp_list", nn.logPath, err)
 	if err != nil {
@@ -182,11 +182,11 @@ func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(cou
 		rows.Scan(&coun)
 	}
 
-	if check_row_exist {
-		if check_exist_row(coun) {
-			return 1002, nil
-		}
+
+	if check_exist_row(coun) {
+		return 1002, nil
 	}
+
 
 	//err = nn.insertImsi(imsi, group)
 	err = nn.query_to_Db(cmd_query)
@@ -219,10 +219,11 @@ func checkData(imsi, group string) (int, error) {
 }
 
 func (nn *server) Init() {
-	pathConf := "/opt/svyazcom/etc/serverSOAP/"
-	//pathConf := "./"
+	//pathConf := "/opt/svyazcom/etc/serverSOAP/"
+	pathConf := "/home/maxim/go/src/SOAP/serverSOAP/"
 	config := LoadConfiguration(pathConf + "soap.conf")
 	connStr := "user=" + config.Database.User + " dbname=" + config.Database.Dbname + " host=" + config.Database.Host + " password=" + config.Database.Password + " port=" + config.Database.Port + " sslmode=disable"
+	fmt.Print(connStr)
 	db, err := sql.Open("postgres", connStr)
 	checkError("error db connect", nn.logPath, err)
 	nn.conn = db
