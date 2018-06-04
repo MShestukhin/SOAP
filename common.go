@@ -31,6 +31,7 @@ func loging(message, path string) {
 
 func checkError(message, path string, err error) {
 	if err != nil {
+		fmt.Println(err)
 		stringGoError := err.Error()
 		f, err := os.OpenFile(path+"error.log", os.O_RDWR|os.O_APPEND, 0660)
 		if err != nil {
