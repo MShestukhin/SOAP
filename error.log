@@ -1,1 +1,0 @@
-2018.06.01 14:29:47   Cannot update grp_imsiUPDATE grp_imsi SET imsi=150012345678992 WHERE imsi='150012345678994'   pq: duplicate key value violates unique constraint "grp_imsi_list_id_imsi_key"
