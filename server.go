@@ -17,9 +17,9 @@ const (
 )
 
 type ReqXml struct {
-	Xmlns   string `xml:"xmlns,attr"`
-	Imsi    string `xml:"imsi"`
-	GroupId string `xml:"groupId"`
+	Xmlns        string `xml:"xmlns,attr"`
+	Imsi         string `xml:"imsi"`
+	GroupId      string `xml:"groupId"`
 	Imsi_replace string `xml:"newImsi"`
 }
 
@@ -30,9 +30,9 @@ type BodyXml struct {
 }
 type SoapXml struct {
 	XMLName xml.Name //`xml:"SOAP-ENV:Envelope"`
-	Env     string   `xml:"xmlns:SOAP-ENV,attr"`
-	Xsi     string   `xml:"xmlns:xsi,attr"`
-	Body    BodyXml  //`xml:"SOAP-ENV:Body"`
+	Env     string `xml:"xmlns:SOAP-ENV,attr"`
+	Xsi     string `xml:"xmlns:xsi,attr"`
+	Body    BodyXml //`xml:"SOAP-ENV:Body"`
 }
 
 type ErrorCode struct {
@@ -76,23 +76,9 @@ type Config struct {
 }
 
 type server struct {
-	conn    *sql.DB
-	logPath string
+	conn     *sql.DB
+	logPath  string
 	prefImsi map[string]bool
-}
-
-func (nn *server) checkImsi(imsi string){
-	rows, err := nn.conn.Query("select param_value from com_param WHERE code = 'HPMN_MCC_MNC'")
-	var param string
-	checkError("Cannot get com_param", nn.logPath, err)
-	if err != nil {
-		loging("error query - "+err.Error(), nn.logPath)
-		//return 2000, errors.New("Cannot get grp_imsi")
-	}
-	for rows.Next() {
-		rows.Scan(&param)
-		fmt.Println(strings.Split(param,","))
-	}
 }
 
 func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
@@ -116,12 +102,12 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 		imsi_str = q.Body.UpdateReq.Imsi
 		group_id_str = q.Body.UpdateReq.Imsi_replace
 		query = fmt.Sprintf("UPDATE grp_imsi SET imsi=%s WHERE imsi='%s'", group_id_str, imsi_str)
-		check_row_exist = checkUpdate//update
+		check_row_exist = checkUpdate //update
 		requestResponse = "UpdateRequestResponse"
 	} else if q.Body.AddReq.Imsi == "" && q.Body.DeleteReq.Imsi != "" {
 		imsi_str = q.Body.DeleteReq.Imsi
 		group_id_str = q.Body.DeleteReq.GroupId
-		check_row_exist = checkDelete//delete
+		check_row_exist = checkDelete //delete
 		query = fmt.Sprintf("DELETE from grp_imsi WHERE list_id = %s AND imsi = '%s'", group_id_str, imsi_str)
 		requestResponse = "DeleteRequestResponse"
 	} else {
@@ -129,7 +115,6 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 		requestResponse = "DeleteRequestResponse"
 	}
 	status, err := nn.checkData(imsi_str, group_id_str)
-	nn.checkImsi(imsi_str)
 	if err == nil {
 		status, err = nn.doImsi(imsi_str, group_id_str, query, check_row_exist)
 		nn.logQuery("add query", imsi_str, group_id_str, r.RemoteAddr, status, err)
@@ -149,39 +134,38 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	w.Write(x)
 }
 
-func checkInsert(coun int, conn *sql.DB, param string ) (int, string) {
-	if coun != 0{
+func checkInsert(coun int, conn *sql.DB, param string) (int, string) {
+	if coun != 0 {
 		return 1002, ""
 	}
 	_, err := conn.Query("select count(id) from grp_list WHERE id = $1", param)
 	if err != nil {
 		return 2000, "Cannot get grp_imsi"
 	}
-	return 0,""
+	return 0, ""
 }
 
-func checkUpdate(coun int, conn *sql.DB, param string ) (int, string) {
-	if coun == 0{
+func checkUpdate(coun int, conn *sql.DB, param string) (int, string) {
+	if coun == 0 {
 		return 1004, ""
 	}
 	//_, err := conn.Query("select count(id) from grp_imsi WHERE imsi = $1", param)
 	//if err != nil {
 	//	return 2000, "Cannot get grp_imsi"
 	//}
-	return 0,""
+	return 0, ""
 }
 
-func checkDelete(coun int, conn *sql.DB, param string ) (int, string) {
-	if coun == 0{
+func checkDelete(coun int, conn *sql.DB, param string) (int, string) {
+	if coun == 0 {
 		return 1002, ""
 	}
 	_, err := conn.Query("select count(id) from grp_list WHERE id = $1", param)
 	if err != nil {
 		return 2000, "Cannot get grp_imsi"
 	}
-	return 0,""
+	return 0, ""
 }
-
 
 func (nn *server) logQuery(header, imsi, group, ip string, status int, err error) {
 	errText := ""
@@ -193,9 +177,13 @@ func (nn *server) logQuery(header, imsi, group, ip string, status int, err error
 }
 
 func (nn *server) query_to_Db(query string) error {
-	tx, _ := nn.conn.Begin()
+	tx, err := nn.conn.Begin()
+	if err != nil {
+		loging("Can not open transaction - "+err.Error(), nn.logPath)
+	}
+	defer tx.Commit()
 	tx.Exec("select set_config('user.id', '17', false)")
-	_, err := tx.Exec("select current_setting('user.id')")
+	_, err = tx.Exec("select current_setting('user.id')")
 	fmt.Println(query)
 	checkError("Cannot set param", nn.logPath, err)
 	_, err = tx.Exec(query)
@@ -206,11 +194,10 @@ func (nn *server) query_to_Db(query string) error {
 		loging("error query - "+err.Error(), nn.logPath)
 		return err
 	}
-	err = tx.Commit()
-	return err
+	return nil
 }
 
-func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(coun int, conn *sql.DB,param string) (int, string)) (int, error) {
+func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(coun int, conn *sql.DB, param string) (int, string)) (int, error) {
 	var coun int
 	rows, err := nn.conn.Query("select count(id) from grp_imsi WHERE imsi = $1", imsi)
 	checkError("Cannot get grp_imsi", nn.logPath, err)
@@ -221,12 +208,12 @@ func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(cou
 	for rows.Next() {
 		rows.Scan(&coun)
 	}
-	if code, errString := check_exist_row(coun, nn.conn, group); code!=0 {
+	if code, errString := check_exist_row(coun, nn.conn, group); code != 0 {
 		return code, errors.New(errString)
 	}
 	err = nn.query_to_Db(cmd_query)
 	if err != nil {
-		if strings.Contains(err.Error(),"duplicate key value violates unique constraint"){
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
 			return 1004, errors.New("Preset imsi already exists")
 		}
 		return 2000, errors.New("Cannot insert grp_imsi")
@@ -237,6 +224,10 @@ func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(cou
 func (nn *server) checkData(imsi, group string) (int, error) {
 	if imsi == "" || group == "" {
 		return 800, errors.New("imsi AND group cannot be empty")
+	}
+
+	if len(imsi) != 15 {
+		return 800, errors.New("IMSI should consist of 15 digits")
 	}
 
 	if _, ok := nn.prefImsi[imsi[0:5]]; ! ok {
@@ -254,15 +245,12 @@ func (nn *server) checkData(imsi, group string) (int, error) {
 	if i > 2147483647 {
 		return 800, errors.New("groupID excceed the max value")
 	}*/
-	if len(imsi) != 15 {
-		return 800, errors.New("IMSI should consist of 15 digits")
-	}
 	return 0, nil
 }
 
 func (nn *server) Init() {
-	//pathConf := "/opt/svyazcom/etc/serverSOAP/"
-	pathConf := "/home/maxim/go/src/SOAP/serverSOAP/"
+	pathConf := "/opt/svyazcom/etc/serverSOAP/"
+	//pathConf := "/home/maxim/go/src/SOAP/serverSOAP/"
 	config := LoadConfiguration(pathConf + "soap.conf")
 	connStr := "user=" + config.Database.User + " dbname=" + config.Database.Dbname + " host=" + config.Database.Host + " password=" + config.Database.Password + " port=" + config.Database.Port + " sslmode=disable"
 	fmt.Print(connStr)
@@ -271,22 +259,23 @@ func (nn *server) Init() {
 	nn.conn = db
 	nn.logPath = config.logPath
 	nn.conn.Query("SET search_path TO steer_web, steer, public")
-	rows, err := nn.conn.Query("select param_value from com_param WHERE code = 'HPMN_MCC_MNC'")
+	rows := nn.conn.QueryRow("select param_value from com_param WHERE code = 'HPMN_MCC_MNC'")
 	var param string
 	checkError("Cannot get com_param", nn.logPath, err)
-	if err != nil {
-		loging("error query - "+err.Error(), nn.logPath)
-		//return 2000, errors.New("Cannot get grp_imsi")
-	}
 	nn.prefImsi = make(map[string]bool)
-	for rows.Next() {
-		rows.Scan(&param)
-		s:=strings.Split(param,",")
-		for i:=0;i<len(s);i++{
-			nn.prefImsi[s[i]]=true;
+	rows.Scan(&param)
+	paramWithoutSpaces := strings.Replace(param, " ", "", -1)
+	s := strings.Split(paramWithoutSpaces, ",")
+	for i := 0; i < len(s); i++ {
+		if len(s[i]) >= 5 && len(s[i]) <= 6 {
+			nn.prefImsi[s[i]] = true
 		}
-		//fmt.Println(param)
 	}
+	for v, k := range nn.prefImsi {
+		fmt.Println(v, k)
+	}
+	loging("ServerSo start ", nn.logPath)
+	// fmt.Println(param)
 	// fasthttp.ListenAndServe(port, nn.testProcessing)
 	// http.HandleFunc("/", nn.testProcessing)
 	http.HandleFunc("/", nn.processing)
