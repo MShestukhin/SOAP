@@ -150,7 +150,8 @@ func checkInsert(coun int, conn *sql.DB, param string ) (int, string) {
 }
 
 func checkUpdate(coun int, conn *sql.DB, param string ) (int, string) {
-	if coun == 0{
+
+	/*if coun == 0{
 		return 1004, ""
 	}
 	/*rows, err := conn.Query("select count(id) from grp_imsi WHERE imsi = $1", param)
@@ -205,8 +206,8 @@ func (nn *server) query_to_Db(query string) error {
 }
 
 func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(coun int, conn *sql.DB,param string) (int, string)) (int, error) {
-	var coun int
-	rows, err := nn.conn.Query("select count(id) from grp_imsi WHERE imsi = $1", imsi)
+	//coun:=1
+	/*rows, err := nn.conn.Query("select count(id) from grp_imsi WHERE imsi = $1", imsi)
 	checkError("Cannot get grp_imsi", nn.logPath, err)
 	if err != nil {
 		loging("error query - "+err.Error(), nn.logPath)
@@ -218,15 +219,14 @@ func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(cou
 	fmt.Println(group)
 	if code, errString := check_exist_row(coun, nn.conn, group); code!=0 {
 		return code, errors.New(errString)
-	}
+	}*/
 
 	//err = nn.insertImsi(imsi, group)
-	err = nn.query_to_Db(cmd_query)
-	//err = nn.updateImsi(imsi, group)
+	err := nn.query_to_Db(cmd_query)
 	if err != nil {
 		return 2000, errors.New("Cannot insert grp_imsi")
 	}
-	defer rows.Close()
+	//defer rows.Close()
 	return 0, nil
 }
 
