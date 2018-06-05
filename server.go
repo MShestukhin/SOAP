@@ -8,8 +8,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	_ "github.com/lib/pq"
+<<<<<<< HEAD
 	"regexp"
 	"strings"
+=======
+	"strings"
+	"regexp"
+>>>>>>> new_branch
 )
 
 const (
@@ -17,9 +22,15 @@ const (
 )
 
 type ReqXml struct {
+<<<<<<< HEAD
 	Xmlns        string `xml:"xmlns,attr"`
 	Imsi         string `xml:"imsi"`
 	GroupId      string `xml:"groupId"`
+=======
+	Xmlns   string `xml:"xmlns,attr"`
+	Imsi    string `xml:"imsi"`
+	GroupId string `xml:"groupId"`
+>>>>>>> new_branch
 	Imsi_replace string `xml:"newImsi"`
 }
 
@@ -76,8 +87,13 @@ type Config struct {
 }
 
 type server struct {
+<<<<<<< HEAD
 	conn     *sql.DB
 	logPath  string
+=======
+	conn    *sql.DB
+	logPath string
+>>>>>>> new_branch
 	prefImsi map[string]bool
 }
 
@@ -134,6 +150,7 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	w.Write(x)
 }
 
+<<<<<<< HEAD
 func checkInsert(coun int, conn *sql.DB, param string) (int, string) {
 	if coun != 0 {
 		return 1002, ""
@@ -158,13 +175,54 @@ func checkUpdate(coun int, conn *sql.DB, param string) (int, string) {
 
 func checkDelete(coun int, conn *sql.DB, param string) (int, string) {
 	if coun == 0 {
+=======
+func checkInsert(coun int, conn *sql.DB, param string ) (int, string) {
+	/*if coun != 0{
+		return 1002, ""
+	}*/
+	rows, err := conn.Query("select count(id) from grp_list WHERE id = $1", param)
+	if err != nil {
+		return 2000, "Cannot get grp_imsi"
+	}
+	for rows.Next() {
+		rows.Scan(&coun)
+	}
+	defer rows.Close()
+	return 0,""
+}
+
+func checkUpdate(coun int, conn *sql.DB, param string ) (int, string) {
+	if coun == 0{
+		return 1004, ""
+	}
+	/*rows, err := conn.Query("select count(id) from grp_imsi WHERE imsi = $1", param)
+	if err != nil {
+		return 2000, "Cannot get grp_imsi"
+	}
+	for rows.Next() {
+		rows.Scan(&coun)
+	}*/
+	return 0,""
+}
+
+func checkDelete(coun int, conn *sql.DB, param string ) (int, string) {
+	/*if coun == 0{
+>>>>>>> new_branch
 		return 1002, ""
 	}
 	_, err := conn.Query("select count(id) from grp_list WHERE id = $1", param)
 	if err != nil {
 		return 2000, "Cannot get grp_imsi"
 	}
+<<<<<<< HEAD
 	return 0, ""
+=======
+	for rows.Next() {
+		rows.Scan(&coun)
+	}
+	defer rows.Close()*/
+	return 0,""
+>>>>>>> new_branch
 }
 
 func (nn *server) logQuery(header, imsi, group, ip string, status int, err error) {
@@ -211,6 +269,11 @@ func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(cou
 	if code, errString := check_exist_row(coun, nn.conn, group); code != 0 {
 		return code, errors.New(errString)
 	}
+<<<<<<< HEAD
+=======
+
+	//err = nn.insertImsi(imsi, group)
+>>>>>>> new_branch
 	err = nn.query_to_Db(cmd_query)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
@@ -218,16 +281,22 @@ func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(cou
 		}
 		return 2000, errors.New("Cannot insert grp_imsi")
 	}
+	defer rows.Close()
 	return 0, nil
 }
 
+<<<<<<< HEAD
 func (nn *server) checkData(imsi, group string) (int, error) {
+=======
+func (nn *server)  checkData(imsi, group string) (int, error) {
+>>>>>>> new_branch
 	if imsi == "" || group == "" {
 		return 800, errors.New("imsi AND group cannot be empty")
 	}
 
 	if len(imsi) != 15 {
 		return 800, errors.New("IMSI should consist of 15 digits")
+<<<<<<< HEAD
 	}
 
 	if _, ok := nn.prefImsi[imsi[0:5]]; ! ok {
@@ -245,12 +314,28 @@ func (nn *server) checkData(imsi, group string) (int, error) {
 	if i > 2147483647 {
 		return 800, errors.New("groupID excceed the max value")
 	}*/
+=======
+	}
+
+	if _, ok := nn.prefImsi[imsi[0:5]]; ! ok {
+		return 800, errors.New("imsi check error")
+	}
+	r, _ := regexp.Compile("^[0-9]+$")
+
+	if !r.Match([]byte(imsi)) || !r.Match([]byte(group)) {
+		return 800, errors.New("imsi AND group should consist only from digits")
+	}
+
+>>>>>>> new_branch
 	return 0, nil
 }
 
 func (nn *server) Init() {
 	pathConf := "/opt/svyazcom/etc/serverSOAP/"
+<<<<<<< HEAD
 	//pathConf := "/home/maxim/go/src/SOAP/serverSOAP/"
+=======
+>>>>>>> new_branch
 	config := LoadConfiguration(pathConf + "soap.conf")
 	connStr := "user=" + config.Database.User + " dbname=" + config.Database.Dbname + " host=" + config.Database.Host + " password=" + config.Database.Password + " port=" + config.Database.Port + " sslmode=disable"
 	fmt.Print(connStr)
@@ -258,7 +343,11 @@ func (nn *server) Init() {
 	checkError("error db connect", nn.logPath, err)
 	nn.conn = db
 	nn.logPath = config.logPath
+<<<<<<< HEAD
 	nn.conn.Query("SET search_path TO steer_web, steer, public")
+=======
+	nn.conn.Exec("SET search_path TO steer_web, steer, public")
+>>>>>>> new_branch
 	rows := nn.conn.QueryRow("select param_value from com_param WHERE code = 'HPMN_MCC_MNC'")
 	var param string
 	checkError("Cannot get com_param", nn.logPath, err)
@@ -275,7 +364,10 @@ func (nn *server) Init() {
 		fmt.Println(v, k)
 	}
 	loging("ServerSo start ", nn.logPath)
+<<<<<<< HEAD
 	// fmt.Println(param)
+=======
+>>>>>>> new_branch
 	// fasthttp.ListenAndServe(port, nn.testProcessing)
 	// http.HandleFunc("/", nn.testProcessing)
 	http.HandleFunc("/", nn.processing)
