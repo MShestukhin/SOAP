@@ -10,6 +10,7 @@ import (
 	_ "github.com/lib/pq"
 	"strings"
 	"regexp"
+	_ "net/http/pprof"
 )
 
 const (
@@ -91,23 +92,23 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	var imsi_str string
 	var group_id_str string
 	var query string
-	check_row_exist := checkInsert
+	var typeQuary string
 	if q.Body.AddReq.Imsi != "" && q.Body.DeleteReq.Imsi == "" {
 		imsi_str = q.Body.AddReq.Imsi
 		group_id_str = q.Body.AddReq.GroupId
-		check_row_exist = checkInsert
+		typeQuary="insert"
 		query = fmt.Sprintf("INSERT INTO grp_imsi (list_id, imsi) VALUES (%s, %s)", group_id_str, imsi_str)
 		requestResponse = "AddRequestResponse"
 	} else if q.Body.UpdateReq.Imsi != "" {
 		imsi_str = q.Body.UpdateReq.Imsi
 		group_id_str = q.Body.UpdateReq.Imsi_replace
 		query = fmt.Sprintf("UPDATE grp_imsi SET imsi=%s WHERE imsi='%s'", group_id_str, imsi_str)
-		check_row_exist = checkUpdate//update
+		typeQuary="update"
 		requestResponse = "UpdateRequestResponse"
 	} else if q.Body.AddReq.Imsi == "" && q.Body.DeleteReq.Imsi != "" {
 		imsi_str = q.Body.DeleteReq.Imsi
 		group_id_str = q.Body.DeleteReq.GroupId
-		check_row_exist = checkDelete//delete
+		typeQuary="delete"
 		query = fmt.Sprintf("DELETE from grp_imsi WHERE list_id = %s AND imsi = '%s'", group_id_str, imsi_str)
 		requestResponse = "DeleteRequestResponse"
 	} else {
@@ -116,7 +117,7 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	}
 	status, err := nn.checkData(imsi_str, group_id_str)
 	if err == nil {
-		status, err = nn.doImsi(imsi_str, group_id_str, query, check_row_exist)
+		status, err = nn.doImsi(imsi_str, group_id_str, query, typeQuary)
 		nn.logQuery("add query", imsi_str, group_id_str, r.RemoteAddr, status, err)
 	} else {
 		nn.logQuery("add query", imsi_str, group_id_str, r.RemoteAddr, status, err)
@@ -132,51 +133,6 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	  </SOAP-ENV:Envelope>`, requestResponse, status, requestResponse))
 	w.Header().Set("Content-Type", "application/xml")
 	w.Write(x)
-}
-
-func checkInsert(coun int, conn *sql.DB, param string ) (int, string) {
-	/*if coun != 0{
-		return 1002, ""
-	}*/
-	rows, err := conn.Query("select count(id) from grp_list WHERE id = $1", param)
-	if err != nil {
-		return 2000, "Cannot get grp_imsi"
-	}
-	for rows.Next() {
-		rows.Scan(&coun)
-	}
-	defer rows.Close()
-	return 0,""
-}
-
-func checkUpdate(coun int, conn *sql.DB, param string ) (int, string) {
-
-	/*if coun == 0{
-		return 1004, ""
-	}
-	/*rows, err := conn.Query("select count(id) from grp_imsi WHERE imsi = $1", param)
-	if err != nil {
-		return 2000, "Cannot get grp_imsi"
-	}
-	for rows.Next() {
-		rows.Scan(&coun)
-	}*/
-	return 0,""
-}
-
-func checkDelete(coun int, conn *sql.DB, param string ) (int, string) {
-	/*if coun == 0{
-		return 1002, ""
-	}
-	rows, err := conn.Query("select count(id) from grp_list WHERE id = $1", param)
-	if err != nil {
-		return 2000, "Cannot get grp_imsi"
-	}
-	for rows.Next() {
-		rows.Scan(&coun)
-	}
-	defer rows.Close()*/
-	return 0,""
 }
 
 
@@ -197,34 +153,32 @@ func (nn *server) query_to_Db(query string) error {
 	_, err = tx.Exec(query)
 	checkError("Cannot update grp_imsi"+query, nn.logPath, err)
 	if err != nil {
-		fmt.Println("error query - " + err.Error())
 		loging("error query - "+err.Error(), nn.logPath)
-		return errors.New("Cannot update grp_imsi")
+		return err
 	}
-	err = tx.Commit()
-	return err
+	defer tx.Commit()
+	return nil
 }
 
-func (nn *server) doImsi(imsi, group, cmd_query string, check_exist_row func(coun int, conn *sql.DB,param string) (int, string)) (int, error) {
-	//coun:=1
-	/*rows, err := nn.conn.Query("select count(id) from grp_imsi WHERE imsi = $1", imsi)
-	checkError("Cannot get grp_imsi", nn.logPath, err)
-	if err != nil {
-		loging("error query - "+err.Error(), nn.logPath)
-		return 2000, errors.New("Cannot get grp_imsi")
-	}
-	for rows.Next() {
-		rows.Scan(&coun)
-	}
-	fmt.Println(group)
-	if code, errString := check_exist_row(coun, nn.conn, group); code!=0 {
-		return code, errors.New(errString)
-	}*/
+func (nn *server) doImsi(imsi, group, cmd_query, typeQuery string) (int, error) {
 
-	//err = nn.insertImsi(imsi, group)
 	err := nn.query_to_Db(cmd_query)
 	if err != nil {
-		return 2000, errors.New("Cannot insert grp_imsi")
+		fmt.Println(err.Error())
+		if strings.Contains(err.Error(), "duplicate key value violates") {
+			switch typeQuery {
+			case "insert" :
+				return 1002, errors.New("Can not add: data already exist")
+			case "update" :
+				return 1004, errors.New("Can not update: data already exist")
+			case "delete" :
+				return 1002, errors.New("Can not delete data")
+			}
+		}
+		if strings.Contains(err.Error(), `insert or update on table "grp_imsi" violates`) {
+			return 1004, errors.New("Can not add: group not exist")
+		}
+		return 2000, errors.New("Unexpected error")
 	}
 	//defer rows.Close()
 	return 0, nil
@@ -279,6 +233,7 @@ func (nn *server) Init() {
 	loging("ServerSo start ", nn.logPath)
 	// fasthttp.ListenAndServe(port, nn.testProcessing)
 	// http.HandleFunc("/", nn.testProcessing)
+
 	http.HandleFunc("/", nn.processing)
 	http.ListenAndServe(port, nil)
 }
