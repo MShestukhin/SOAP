@@ -9,7 +9,6 @@ import (
 	"net/http"
 	_ "github.com/lib/pq"
 	"strings"
-	"regexp"
 	_ "net/http/pprof"
 )
 
@@ -28,6 +27,7 @@ type BodyXml struct {
 	AddReq    ReqXml `xml:"AddRequest"`
 	DeleteReq ReqXml `xml:"DeleteRequest"`
 	UpdateReq ReqXml `xml:"UpdateRequest"`
+	DeleteSubscriber ReqXml `xml:"DeleteSubscriber"`
 }
 type SoapXml struct {
 	XMLName xml.Name //`xml:"SOAP-ENV:Envelope"`
@@ -111,7 +111,13 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 		typeQuary="delete"
 		query = fmt.Sprintf("DELETE from grp_imsi WHERE list_id = %s AND imsi = '%s'", group_id_str, imsi_str)
 		requestResponse = "DeleteRequestResponse"
-	} else {
+	} else if q.Body.DeleteSubscriber.Imsi != "" {
+		imsi_str = q.Body.DeleteSubscriber.Imsi
+		group_id_str="4";
+		query = fmt.Sprintf("DELETE from grp_imsi WHERE imsi = '%s'", imsi_str)
+		typeQuary = "deleteSubscriber"
+		requestResponse = "DeleteSubscriber"
+	}	else {
 		loging(fmt.Sprintf("ip - s% incorrect query addImsi - %s deleteImsi - %s", r.RemoteAddr, q.Body.AddReq.Imsi, q.Body.DeleteReq.Imsi), nn.logPath)
 		requestResponse = "DeleteRequestResponse"
 	}
@@ -132,6 +138,9 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 		</SOAP-ENV:Body>
 	  </SOAP-ENV:Envelope>`, requestResponse, status, requestResponse))
 	w.Header().Set("Content-Type", "application/xml")
+	if status != 0 && status != 1002{
+		w.WriteHeader(500)
+	}
 	w.Write(x)
 }
 
@@ -162,6 +171,42 @@ func (nn *server) query_to_Db(query string) error {
 
 func (nn *server) doImsi(imsi, group, cmd_query, typeQuery string) (int, error) {
 
+	if typeQuery=="update"{
+		_, err := nn.checkData(group, group)
+		if err!=nil{
+			return 1004, errors.New("Wrong format IMSI")
+		}
+	}
+	if typeQuery=="delete" {
+		rows, err := nn.conn.Query("select count(id) from grp_list WHERE id = $1", group)
+		checkError("Cannot get grp_list", nn.logPath, err)
+		if err != nil {
+			loging("error query - "+err.Error(), nn.logPath)
+			return 2000, errors.New("Cannot get grp_list")
+		}
+		var coun int
+		for rows.Next() {
+			rows.Scan(&coun)
+		}
+		if coun == 0 {
+			return 1004, nil
+		}
+	}
+	if typeQuery=="delete" || typeQuery=="deleteSubscriber" || typeQuery=="update"{
+		rows, err := nn.conn.Query("select count(id) from grp_imsi WHERE imsi = $1", imsi)
+		checkError("Cannot get grp_imsi", nn.logPath, err)
+		if err != nil {
+			loging("error query - "+err.Error(), nn.logPath)
+			return 2000, errors.New("Cannot get grp_imsi")
+		}
+		var coun int
+		for rows.Next() {
+			rows.Scan(&coun)
+		}
+		if coun == 0 {
+			return 1002, nil
+		}
+	}
 	err := nn.query_to_Db(cmd_query)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -170,7 +215,7 @@ func (nn *server) doImsi(imsi, group, cmd_query, typeQuery string) (int, error) 
 			case "insert" :
 				return 1002, errors.New("Can not add: data already exist")
 			case "update" :
-				return 1004, errors.New("Can not update: data already exist")
+				return 1002, errors.New("Can not update: data already exist")
 			case "delete" :
 				return 1002, errors.New("Can not delete data")
 			}
@@ -185,7 +230,7 @@ func (nn *server) doImsi(imsi, group, cmd_query, typeQuery string) (int, error) 
 }
 
 func (nn *server)  checkData(imsi, group string) (int, error) {
-	if imsi == "" || group == "" {
+	if imsi == "" /*|| group == ""*/ {
 		return 800, errors.New("imsi AND group cannot be empty")
 	}
 
@@ -196,11 +241,11 @@ func (nn *server)  checkData(imsi, group string) (int, error) {
 	if _, ok := nn.prefImsi[imsi[0:5]]; ! ok {
 		return 800, errors.New("imsi check error")
 	}
-	r, _ := regexp.Compile("^[0-9]+$")
+	//r, _ := regexp.Compile("^[0-9]+$")
 
-	if !r.Match([]byte(imsi)) || !r.Match([]byte(group)) {
+	/*if !r.Match([]byte(imsi)) || !r.Match([]byte(group)) {
 		return 800, errors.New("imsi AND group should consist only from digits")
-	}
+	}*/
 
 	return 0, nil
 }
