@@ -72,6 +72,7 @@ type Config struct {
 		User     string `json:"user"`
 		Dbname   string `json:"dbname"`
 		Port     string `json:"port"`
+		SoapUser string `json:"soapUser"`
 	} `json:"database"`
 	logPath string `json:"path"`
 }
@@ -80,6 +81,7 @@ type server struct {
 	conn    *sql.DB
 	logPath string
 	prefImsi map[string]bool
+	soapId    string
 }
 
 func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
@@ -93,19 +95,19 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	var group_id_str string
 	var query string
 	var typeQuary string
-	if q.Body.AddReq.Imsi != "" && q.Body.DeleteReq.Imsi == "" {
+	if q.Body.AddReq.Imsi != "" && q.Body.AddReq.GroupId !="" {
 		imsi_str = q.Body.AddReq.Imsi
 		group_id_str = q.Body.AddReq.GroupId
 		typeQuary="insert"
 		query = fmt.Sprintf("INSERT INTO grp_imsi (list_id, imsi) VALUES (%s, %s)", group_id_str, imsi_str)
 		requestResponse = "AddRequestResponse"
-	} else if q.Body.UpdateReq.Imsi != "" {
+	} else if q.Body.UpdateReq.Imsi != "" && q.Body.UpdateReq.Imsi_replace!="" {
 		imsi_str = q.Body.UpdateReq.Imsi
 		group_id_str = q.Body.UpdateReq.Imsi_replace
 		query = fmt.Sprintf("UPDATE grp_imsi SET imsi=%s WHERE imsi='%s'", group_id_str, imsi_str)
 		typeQuary="update"
 		requestResponse = "UpdateRequestResponse"
-	} else if q.Body.AddReq.Imsi == "" && q.Body.DeleteReq.Imsi != "" {
+	} else if q.Body.DeleteReq.Imsi != "" && q.Body.DeleteReq.GroupId !="" {
 		imsi_str = q.Body.DeleteReq.Imsi
 		group_id_str = q.Body.DeleteReq.GroupId
 		typeQuary="delete"
@@ -113,15 +115,15 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 		requestResponse = "DeleteRequestResponse"
 	} else if q.Body.DeleteSubscriber.Imsi != "" {
 		imsi_str = q.Body.DeleteSubscriber.Imsi
-		group_id_str="4";
 		query = fmt.Sprintf("DELETE from grp_imsi WHERE imsi = '%s'", imsi_str)
 		typeQuary = "deleteSubscriber"
 		requestResponse = "DeleteSubscriber"
 	}	else {
+		typeQuary="errParam"
 		loging(fmt.Sprintf("ip - s% incorrect query addImsi - %s deleteImsi - %s", r.RemoteAddr, q.Body.AddReq.Imsi, q.Body.DeleteReq.Imsi), nn.logPath)
 		requestResponse = "DeleteRequestResponse"
 	}
-	status, err := nn.checkData(imsi_str, group_id_str)
+	status, err := nn.checkData(imsi_str, group_id_str,typeQuary)
 	if err == nil {
 		status, err = nn.doImsi(imsi_str, group_id_str, query, typeQuary)
 		nn.logQuery("add query", imsi_str, group_id_str, r.RemoteAddr, status, err)
@@ -155,9 +157,13 @@ func (nn *server) logQuery(header, imsi, group, ip string, status int, err error
 }
 
 func (nn *server) query_to_Db(query string) error {
-	tx, _ := nn.conn.Begin()
-	tx.Exec("select set_config('user.id', '17', false)")
-	_, err := tx.Exec("select current_setting('user.id')")
+	tx, err := nn.conn.Begin()
+	if err != nil {
+		loging("Can not open transaction - "+err.Error(), nn.logPath)
+	}
+	defer tx.Commit()
+	userQuery := fmt.Sprintf("select set_config('user.id', '%s', false)", nn.soapId)
+	tx.Exec(userQuery)
 	checkError("Cannot set param", nn.logPath, err)
 	_, err = tx.Exec(query)
 	checkError("Cannot update grp_imsi"+query, nn.logPath, err)
@@ -167,12 +173,13 @@ func (nn *server) query_to_Db(query string) error {
 	}
 	defer tx.Commit()
 	return nil
+
 }
 
 func (nn *server) doImsi(imsi, group, cmd_query, typeQuery string) (int, error) {
 
 	if typeQuery=="update"{
-		_, err := nn.checkData(group, group)
+		_, err := nn.checkData(group, group,typeQuery)
 		if err!=nil{
 			return 1004, errors.New("Wrong format IMSI")
 		}
@@ -229,18 +236,23 @@ func (nn *server) doImsi(imsi, group, cmd_query, typeQuery string) (int, error) 
 	return 0, nil
 }
 
-func (nn *server)  checkData(imsi, group string) (int, error) {
-	if imsi == "" /*|| group == ""*/ {
+func (nn *server)  checkData(imsi, group,typeQuery string) (int, error) {
+	/*if imsi == "" /*|| group == "" {
 		return 800, errors.New("imsi AND group cannot be empty")
+	}*/
+
+	if typeQuery =="errParam" {
+		return 800, errors.New("imsi check error")
 	}
 
 	if len(imsi) != 15 {
-		return 800, errors.New("IMSI should consist of 15 digits")
+		return 1004, errors.New("IMSI should consist of 15 digits")
 	}
 
 	if _, ok := nn.prefImsi[imsi[0:5]]; ! ok {
-		return 800, errors.New("imsi check error")
+		return 1004, errors.New("imsi check error")
 	}
+
 	//r, _ := regexp.Compile("^[0-9]+$")
 
 	/*if !r.Match([]byte(imsi)) || !r.Match([]byte(group)) {
@@ -254,7 +266,7 @@ func (nn *server) Init() {
 	pathConf := "/opt/svyazcom/etc/serverSOAP/"
 	config := LoadConfiguration(pathConf + "soap.conf")
 	connStr := "user=" + config.Database.User + " dbname=" + config.Database.Dbname + " host=" + config.Database.Host + " password=" + config.Database.Password + " port=" + config.Database.Port + " sslmode=disable"
-	fmt.Print(connStr)
+	nn.soapId = config.Database.SoapUser
 	db, err := sql.Open("postgres", connStr)
 	checkError("error db connect", nn.logPath, err)
 	nn.conn = db
