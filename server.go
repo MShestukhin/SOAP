@@ -10,6 +10,8 @@ import (
 	_ "github.com/lib/pq"
 	"strings"
 	_ "net/http/pprof"
+	"time"
+	_ "golang.org/x/net/netutil"
 )
 
 const (
@@ -73,6 +75,7 @@ type Config struct {
 		Dbname   string `json:"dbname"`
 		Port     string `json:"port"`
 		SoapUser string `json:"soapUser"`
+		MaxConnection int `json:"maxConnection"`
 	} `json:"database"`
 	logPath string `json:"path"`
 }
@@ -82,9 +85,14 @@ type server struct {
 	logPath string
 	prefImsi map[string]bool
 	soapId    string
+	sem chan bool
 }
 
+
+
 func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
+	nn.sem <- true
+	defer func() { <-nn.sem }()
 	xmlFile, _ := ioutil.ReadAll(r.Body)
 	r.Body.Close()
 	var q SoapXml
@@ -95,6 +103,7 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	var group_id_str string
 	var query string
 	var typeQuary string
+	time.Sleep(time.Millisecond * 50)
 	if q.Body.AddReq.Imsi != "" && q.Body.AddReq.GroupId !="" {
 		imsi_str = q.Body.AddReq.Imsi
 		group_id_str = q.Body.AddReq.GroupId
@@ -223,8 +232,6 @@ func (nn *server) doImsi(imsi, group, cmd_query, typeQuery string) (int, error) 
 				return 1002, errors.New("Can not add: data already exist")
 			case "update" :
 				return 1002, errors.New("Can not update: data already exist")
-			case "delete" :
-				return 1002, errors.New("Can not delete data")
 			}
 		}
 		if strings.Contains(err.Error(), `insert or update on table "grp_imsi" violates`) {
@@ -237,10 +244,6 @@ func (nn *server) doImsi(imsi, group, cmd_query, typeQuery string) (int, error) 
 }
 
 func (nn *server)  checkData(imsi, group,typeQuery string) (int, error) {
-	/*if imsi == "" /*|| group == "" {
-		return 800, errors.New("imsi AND group cannot be empty")
-	}*/
-
 	if typeQuery =="errParam" {
 		return 800, errors.New("imsi check error")
 	}
@@ -265,6 +268,8 @@ func (nn *server)  checkData(imsi, group,typeQuery string) (int, error) {
 func (nn *server) Init() {
 	pathConf := "/opt/svyazcom/etc/serverSOAP/"
 	config := LoadConfiguration(pathConf + "soap.conf")
+	fmt.Println(config.Database.MaxConnection)
+	nn.sem = make(chan bool, config.Database.MaxConnection)
 	connStr := "user=" + config.Database.User + " dbname=" + config.Database.Dbname + " host=" + config.Database.Host + " password=" + config.Database.Password + " port=" + config.Database.Port + " sslmode=disable"
 	nn.soapId = config.Database.SoapUser
 	db, err := sql.Open("postgres", connStr)
@@ -288,36 +293,16 @@ func (nn *server) Init() {
 		fmt.Println(v, k)
 	}
 	loging("ServerSo start ", nn.logPath)
-	// fasthttp.ListenAndServe(port, nn.testProcessing)
-	// http.HandleFunc("/", nn.testProcessing)
-
 	http.HandleFunc("/", nn.processing)
 	http.ListenAndServe(port, nil)
+	//srv := &http.Server{
+	//	Addr: "localhost:" + port,
+	//}
+	//ln, err := net.Listen("tcp", srv.Addr)
+	//if err != nil {
+	//	log.Fatalln(err)
+	//}
+	//defer ln.Close()
+	//ln= netutil.LimitListener(ln, 20);
 }
 
-/*func (nn *server) testProcessing(ctx *fasthttp.RequestCtx) {
-	// set some headers and status code first
-	ctx.SetContentType("foo/bar")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-
-	// then write the first part of body
-	fmt.Fprintf(ctx, "this is the first part of body\n")
-
-	// then set more headers
-	ctx.Response.Header.Set("Foo-Bar", "baz")
-
-	// then write more body
-	fmt.Fprintf(ctx, "this is the second part of body\n")
-
-	// then override already written body
-	ctx.SetBody([]byte("this is completely new body contents"))
-
-	// then update status code
-	ctx.SetStatusCode(fasthttp.StatusNotFound)
-
-	// basically, anything may be updated many times before
-	// returning from RequestHandler.
-	//
-	// Unlike net/http fasthttp doesn't put response to the wire until
-	// returning from RequestHandler.
-}*/

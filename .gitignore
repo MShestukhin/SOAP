@@ -2,3 +2,5 @@
 serverSOAP
 log
 error.log
+go_build_SOAP_serverSOAP
+
