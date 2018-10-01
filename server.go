@@ -11,7 +11,7 @@ import (
 	"strings"
 	_ "net/http/pprof"
 	"time"
-	_ "golang.org/x/net/netutil"
+	//_ "golang.org/x/net/netutil"
 )
 
 const (
