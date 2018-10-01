@@ -16,7 +16,7 @@ func loging(message, path string) {
 		os.Mkdir(path+"log", 0777)
 	}
 	day := time.Now().Format("2006.01.02")
-	nameLog := path + "log/" + day + "log" + ".log"
+	nameLog := path + "log/" + day  + ".log"
 	f, err := os.OpenFile(nameLog, os.O_RDWR|os.O_APPEND, 0660)
 	if err != nil {
 		f, err = os.Create(nameLog)

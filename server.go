@@ -77,7 +77,7 @@ type Config struct {
 		SoapUser string `json:"soapUser"`
 		MaxConnection int `json:"maxConnection"`
 	} `json:"database"`
-	LogPath string `json:"path"`
+	LogPath string `json:"logPath"`
 }
 
 type server struct {
@@ -95,6 +95,7 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	defer func() { <-nn.sem }()
 	xmlFile, _ := ioutil.ReadAll(r.Body)
 	r.Body.Close()
+	loging(fmt.Sprintf("%s",xmlFile), nn.logPath)
 	var q SoapXml
 	_ = xmlFile
 	xml.Unmarshal((xmlFile), &q)
@@ -152,6 +153,7 @@ func (nn *server) processing(w http.ResponseWriter, r *http.Request) {
 	if status != 0 && status != 1002{
 		w.WriteHeader(500)
 	}
+	loging(fmt.Sprintf("%s",x), nn.logPath)
 	w.Write(x)
 }
 
