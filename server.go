@@ -77,7 +77,7 @@ type Config struct {
 		SoapUser string `json:"soapUser"`
 		MaxConnection int `json:"maxConnection"`
 	} `json:"database"`
-	logPath string `json:"path"`
+	LogPath string `json:"path"`
 }
 
 type server struct {
@@ -266,7 +266,7 @@ func (nn *server)  checkData(imsi, group,typeQuery string) (int, error) {
 }
 
 func (nn *server) Init() {
-	pathConf := "/opt/svyazcom/etc/serverSOAP/"
+	pathConf := "/opt/svyazcom/etc/"
 	config := LoadConfiguration(pathConf + "soap.conf")
 	fmt.Println(config.Database.MaxConnection)
 	nn.sem = make(chan bool, config.Database.MaxConnection)
@@ -275,7 +275,7 @@ func (nn *server) Init() {
 	db, err := sql.Open("postgres", connStr)
 	checkError("error db connect", nn.logPath, err)
 	nn.conn = db
-	nn.logPath = config.logPath
+	nn.logPath = config.LogPath
 	nn.conn.Exec("SET search_path TO steer_web, steer, public")
 	rows := nn.conn.QueryRow("select param_value from com_param WHERE code = 'HPMN_MCC_MNC'")
 	var param string
